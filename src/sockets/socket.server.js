@@ -44,9 +44,9 @@ async function initSocketServer(httpServer) {
         }
 
         // Maintain Chat History
-        const chatHistory = await messageModel.find({
+        const chatHistory = (await messageModel.find({
           chat: chatId,
-        });
+        }).sort({ createdAt: -1}).limit(20).lean()).reverse();
         // console.log("Chat history --->", chatHistory);
 
         // seeing chatHistory with main stuffs (like role & content is necessary here to fetch)
