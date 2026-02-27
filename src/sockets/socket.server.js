@@ -8,17 +8,13 @@ const messageModel = require("../models/message.model");
 async function initSocketServer(httpServer) {
   const io = new Server(httpServer, {});
 
-  /* socket middleware */
   io.use(async (socket, next) => {
-    // accessing cookie (userToken from postman)
     const cookies = cookie.parse(socket.handshake.headers?.cookie || "");
 
-    // if user token not provided
     if (!cookies.userToken) {
       return next(new Error("Authentication error: No token provided"));
     }
 
-    // user token provided, so verifying user token
     try {
       const decoded = jwt.verify(cookies.userToken, process.env.JWT_SECRET);
 
@@ -31,20 +27,7 @@ async function initSocketServer(httpServer) {
   });
 
   io.on("connection", (socket) => {
-    // console.log("User connected --->", socket.user);
-    // console.log("New Socket connection established", socket.id);
-
-    // "ai-message" is an Event listener
     socket.on("ai-message", async (messagePayload) => {
-      /* 
-      
-      messagePayload = { 
-        "chatId": "69a0513ec5f6b76a0f9eff33",
-        "content": "Hello AI."
-      } ===> from postman it is coming as "string" but it should be "object", so we have to parse it.
-      
-      */
-
       try {
         let data =
           typeof messagePayload === "string"
@@ -60,6 +43,24 @@ async function initSocketServer(httpServer) {
           return socket.emit("error", { message: "Content is required" });
         }
 
+        // Maintain Chat History
+        const chatHistory = await messageModel.find({
+          chat: chatId,
+        });
+        // console.log("Chat history --->", chatHistory);
+
+        // seeing chatHistory with main stuffs (like role & content is necessary here to fetch)
+        // now you can pass this chat history to ai-model for retain short-term-history reference
+        // console.log(
+        //   "Chat history --->",
+        //   chatHistory.map((item) => {
+        //     return {
+        //       role: item.role,
+        //       parts: [{ text: item.content }],
+        //     };
+        //   }),
+        // );
+
         // saving user message in DB, in order to maintain history
         await messageModel.create({
           chat: chatId,
@@ -68,7 +69,14 @@ async function initSocketServer(httpServer) {
           role: "user",
         });
 
-        const aiResponse = await aiService.generateResponse(content);
+        const aiResponse = await aiService.generateResponse(
+          chatHistory.map((item) => {
+            return {
+              role: item.role,
+              parts: [{ text: item.content }],
+            };
+          }),
+        );
         console.log("Gemini AI Response --->", aiResponse);
 
         // saving ai response message in DB, in order to maintain history
@@ -79,7 +87,6 @@ async function initSocketServer(httpServer) {
           role: "model",
         });
 
-        // sending ai-response to user
         socket.emit("ai-response", {
           content: aiResponse,
           chatId: chatId,
