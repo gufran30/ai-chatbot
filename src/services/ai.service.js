@@ -32,4 +32,22 @@ async function generateResponse(input) {
   }
 }
 
-module.exports = { generateResponse };
+async function generateVector(content) {
+  try {
+    const response = await ai.models.embedContent({
+      model: "gemini-embedding-001",
+      contents: content,
+      config: {
+        outputDimensionality: 768, // same as you made in pinecone (i.e 768)
+      },
+    });
+
+    return response.embeddings[0].values;
+  } catch (error) {
+    // If you see the 400 error here, it means the 'contents' array was somehow malformed
+    console.error("Gemini SDK Error (embedding):", error);
+    throw error;
+  }
+}
+
+module.exports = { generateResponse, generateVector };

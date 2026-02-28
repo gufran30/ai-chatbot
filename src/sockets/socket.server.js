@@ -4,6 +4,10 @@ const jwt = require("jsonwebtoken");
 const userModel = require("../models/user.model");
 const aiService = require("../services/ai.service");
 const messageModel = require("../models/message.model");
+const {
+  createVectorMemory,
+  queryMemory,
+} = require("../services/vector.service");
 
 async function initSocketServer(httpServer) {
   const io = new Server(httpServer, {});
@@ -43,31 +47,39 @@ async function initSocketServer(httpServer) {
           return socket.emit("error", { message: "Content is required" });
         }
 
-        // Maintain Chat History
-        const chatHistory = (await messageModel.find({
-          chat: chatId,
-        }).sort({ createdAt: -1}).limit(20).lean()).reverse();
-        // console.log("Chat history --->", chatHistory);
+        // saving user message in MongoDB, in order to maintain history
+        // await messageModel.create({
+        //   chat: chatId,
+        //   user: socket.user._id,
+        //   content: content,
+        //   role: "user",
+        // });
 
-        // seeing chatHistory with main stuffs (like role & content is necessary here to fetch)
-        // now you can pass this chat history to ai-model for retain short-term-history reference
-        // console.log(
-        //   "Chat history --->",
-        //   chatHistory.map((item) => {
-        //     return {
-        //       role: item.role,
-        //       parts: [{ text: item.content }],
-        //     };
-        //   }),
-        // );
+        // creating vector & long-term-memory in PineCone DB
+        const vectors = await aiService.generateVector(content);
 
-        // saving user message in DB, in order to maintain history
-        await messageModel.create({
-          chat: chatId,
-          user: socket.user._id,
-          content: content,
-          role: "user",
+        console.log("Vector length check:", vectors?.length); // Should be a number (e.g., 768)
+        console.log("Is vector an array?", Array.isArray(vectors));
+        
+        await createVectorMemory({
+          vectors,
+          messageId: Date.now().toString(), // Use timestamp for testing unique IDs
+          metadata: {
+            chat: chatId,
+            user: socket.user._id.toString(), // Convert ObjectId to string for Pinecone
+          },
         });
+
+        // Maintain Chat History
+        const chatHistory = (
+          await messageModel
+            .find({
+              chat: chatId,
+            })
+            .sort({ createdAt: -1 })
+            .limit(20)
+            .lean()
+        ).reverse();
 
         const aiResponse = await aiService.generateResponse(
           chatHistory.map((item) => {
@@ -79,13 +91,13 @@ async function initSocketServer(httpServer) {
         );
         console.log("Gemini AI Response --->", aiResponse);
 
-        // saving ai response message in DB, in order to maintain history
-        await messageModel.create({
-          chat: chatId,
-          user: socket.user._id,
-          content: aiResponse,
-          role: "model",
-        });
+        // saving ai response message in MongoDB, in order to maintain history
+        // await messageModel.create({
+        //   chat: chatId,
+        //   user: socket.user._id,
+        //   content: aiResponse,
+        //   role: "model",
+        // });
 
         socket.emit("ai-response", {
           content: aiResponse,
