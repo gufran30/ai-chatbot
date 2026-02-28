@@ -48,29 +48,40 @@ async function initSocketServer(httpServer) {
         }
 
         // saving user message in MongoDB, in order to maintain history
-        // await messageModel.create({
-        //   chat: chatId,
-        //   user: socket.user._id,
-        //   content: content,
-        //   role: "user",
-        // });
+        const userMessage = await messageModel.create({
+          chat: chatId,
+          user: socket.user._id,
+          content: content,
+          role: "user",
+        });
 
         // creating vector & long-term-memory in PineCone DB
         const vectors = await aiService.generateVector(content);
 
         console.log("Vector length check:", vectors?.length); // Should be a number (e.g., 768)
         console.log("Is vector an array?", Array.isArray(vectors));
-        
+
+        // create vector memory
+        const vectorMemory = await queryMemory({
+          queryVector: vectors,
+          limit: 3,
+          metadata: {},
+        });
+
+        console.log("vectorMemory --->", vectorMemory);
+
+        // saving user message (with vector) to Pinecone DB
         await createVectorMemory({
           vectors,
-          messageId: Date.now().toString(), // Use timestamp for testing unique IDs
+          messageId: userMessage._id,
           metadata: {
             chat: chatId,
             user: socket.user._id.toString(), // Convert ObjectId to string for Pinecone
+            text: content,
           },
         });
 
-        // Maintain Chat History
+        // Maintain Chat History - (short-term-memory)
         const chatHistory = (
           await messageModel
             .find({
@@ -92,12 +103,26 @@ async function initSocketServer(httpServer) {
         console.log("Gemini AI Response --->", aiResponse);
 
         // saving ai response message in MongoDB, in order to maintain history
-        // await messageModel.create({
-        //   chat: chatId,
-        //   user: socket.user._id,
-        //   content: aiResponse,
-        //   role: "model",
-        // });
+        const aiMessage = await messageModel.create({
+          chat: chatId,
+          user: socket.user._id,
+          content: aiResponse,
+          role: "model",
+        });
+
+        // saving vector message
+        const vectorResponse = await aiService.generateVector(aiResponse);
+
+        // saving ai message (with vector) to Pinecone DB
+        await createVectorMemory({
+          vectors: vectorResponse,
+          messageId: aiMessage._id,
+          metadata: {
+            chat: chatId,
+            user: socket.user._id.toString(), // Convert ObjectId to string for Pinecone
+            text: aiResponse,
+          },
+        });
 
         socket.emit("ai-response", {
           content: aiResponse,
