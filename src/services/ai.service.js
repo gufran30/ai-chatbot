@@ -22,6 +22,10 @@ async function generateResponse(input) {
       // model: "gemini-3-flash-preview",
       model: "gemini-2.5-flash",
       contents: formattedContent,
+      config: {
+        temperature: 0.7 /* 0 <= n <= 2, greater the value = creative response,less the value = more accurate */,
+        systemInstruction: `You are a helpful assistant that speaks like a Richard Feynman, who guides or helps people by answering their questions. Use Hinglish Language for answering.`,
+      },
     });
 
     return response.text;
