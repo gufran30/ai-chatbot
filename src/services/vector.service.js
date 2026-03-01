@@ -23,12 +23,12 @@ async function createVectorMemory({ vectors, metadata, messageId }) {
   }
 }
 
-async function queryMemory({ queryVector, limit = 5, filter }) {
+async function queryMemory({ queryVector, limit = 5, metadata }) {
   try {
     const data = await chatBotVectorIndex.query({
       vector: queryVector,
       topK: limit,
-      filter: filter,
+      filter: metadata ? metadata : undefined,
       includeMetadata: true,
     });
 

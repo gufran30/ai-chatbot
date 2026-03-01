@@ -47,7 +47,8 @@ async function initSocketServer(httpServer) {
           return socket.emit("error", { message: "Content is required" });
         }
 
-        // saving user message in MongoDB, in order to maintain history
+        /* 
+        // saving user message in MongoDB
         const userMessage = await messageModel.create({
           chat: chatId,
           user: socket.user._id,
@@ -55,20 +56,8 @@ async function initSocketServer(httpServer) {
           role: "user",
         });
 
-        // creating vector & long-term-memory in PineCone DB
+        // generating vector 
         const vectors = await aiService.generateVector(content);
-
-        // create vector memory - Maintain Chat History - (long-term-memory)
-        // independent on chat (maintain user history)
-        const vectorMemory = await queryMemory({
-          queryVector: vectors,
-          limit: 3,
-          metadata: {
-            user: socket.user._id,
-          },
-        });
-
-        // console.log("vectorMemory --->", vectorMemory);
 
         // saving user message (with vector) to Pinecone DB
         await createVectorMemory({
@@ -80,8 +69,44 @@ async function initSocketServer(httpServer) {
             text: content,
           },
         });
+        */
 
-        // Maintain Chat History - (short-term-memory)
+        // These two tasks are independent to each other. So, we can combine them to do work at the same time
+        const [userMessage, vectors] = await Promise.all([
+          // saving user message in MongoDB
+          messageModel.create({
+            chat: chatId,
+            user: socket.user._id,
+            content: content,
+            role: "user",
+          }),
+
+          // generating vector
+          aiService.generateVector(content),
+        ]);
+
+        // saving user message (with vector) to Pinecone DB
+          await createVectorMemory({
+            vectors,
+            messageId: userMessage._id,
+            metadata: {
+              chat: chatId,
+              user: socket.user._id,
+              text: content,
+            },
+          });
+
+        /*
+        // query in Pinecone
+        const vectorMemory = await queryMemory({
+          queryVector: vectors,
+          limit: 3,
+          metadata: {
+            user: socket.user._id,
+          },
+        });
+
+        // Maintain Chat History - (short-term-memory) - retrieve chat history
         const chatHistory = (
           await messageModel
             .find({
@@ -91,6 +116,30 @@ async function initSocketServer(httpServer) {
             .limit(20)
             .lean()
         ).reverse();
+        */
+
+        // Here both tasks are independent to each other. So, we can combine them to do work at the same time
+        const [vectorMemory, chatHistory] = await Promise.all([
+          // query in Pinecone
+          await queryMemory({
+            queryVector: vectors,
+            limit: 3,
+            metadata: {
+              user: socket.user._id,
+            },
+          }),
+
+          // Maintain Chat History - (short-term-memory) - retrieve chat history
+          (
+            await messageModel
+              .find({
+                chat: chatId,
+              })
+              .sort({ createdAt: -1 })
+              .limit(20)
+              .lean()
+          ).reverse(),
+        ]);
 
         const shortTermMemory = chatHistory.map((item) => {
           return {
@@ -118,12 +167,13 @@ async function initSocketServer(httpServer) {
           ...shortTermMemory,
         ]);
 
-        console.log("LongTermMemory --->", longTermMemory);
-        [...longTermMemory].map((item) => console.log("ltm --->", item));
-        console.log("shortTermMemory --->", shortTermMemory);
-        [...shortTermMemory].map((item) => console.log("stm --->", item));
+        socket.emit("ai-response", {
+          content: aiResponse,
+          chatId: chatId,
+        });
 
-        // saving ai response message in MongoDB, in order to maintain history
+        /* 
+        // saving ai response message in MongoDB
         const aiMessage = await messageModel.create({
           chat: chatId,
           user: socket.user._id,
@@ -133,6 +183,20 @@ async function initSocketServer(httpServer) {
 
         // saving vector message
         const vectorResponse = await aiService.generateVector(aiResponse);
+        */
+
+        const [aiMessage, vectorResponse] = await Promise.all([
+          // saving ai response message in MongoDB
+          messageModel.create({
+            chat: chatId,
+            user: socket.user._id,
+            content: aiResponse,
+            role: "model",
+          }),
+
+          // saving vector message
+          aiService.generateVector(aiResponse),
+        ]);
 
         // saving ai message (with vector) to Pinecone DB
         await createVectorMemory({
@@ -143,11 +207,6 @@ async function initSocketServer(httpServer) {
             user: socket.user._id,
             text: aiResponse,
           },
-        });
-
-        socket.emit("ai-response", {
-          content: aiResponse,
-          chatId: chatId,
         });
       } catch (error) {
         console.error("Socket Payload Error:", error.message);
