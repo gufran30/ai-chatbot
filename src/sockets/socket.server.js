@@ -58,17 +58,17 @@ async function initSocketServer(httpServer) {
         // creating vector & long-term-memory in PineCone DB
         const vectors = await aiService.generateVector(content);
 
-        console.log("Vector length check:", vectors?.length); // Should be a number (e.g., 768)
-        console.log("Is vector an array?", Array.isArray(vectors));
-
-        // create vector memory
+        // create vector memory - Maintain Chat History - (long-term-memory)
+        // independent on chat (maintain user history)
         const vectorMemory = await queryMemory({
           queryVector: vectors,
           limit: 3,
-          metadata: {},
+          metadata: {
+            user: socket.user._id,
+          },
         });
 
-        console.log("vectorMemory --->", vectorMemory);
+        // console.log("vectorMemory --->", vectorMemory);
 
         // saving user message (with vector) to Pinecone DB
         await createVectorMemory({
@@ -76,7 +76,7 @@ async function initSocketServer(httpServer) {
           messageId: userMessage._id,
           metadata: {
             chat: chatId,
-            user: socket.user._id.toString(), // Convert ObjectId to string for Pinecone
+            user: socket.user._id,
             text: content,
           },
         });
@@ -92,15 +92,36 @@ async function initSocketServer(httpServer) {
             .lean()
         ).reverse();
 
-        const aiResponse = await aiService.generateResponse(
-          chatHistory.map((item) => {
-            return {
-              role: item.role,
-              parts: [{ text: item.content }],
-            };
-          }),
-        );
-        console.log("Gemini AI Response --->", aiResponse);
+        const shortTermMemory = chatHistory.map((item) => {
+          return {
+            role: item.role,
+            parts: [{ text: item.content }],
+          };
+        });
+
+        const longTermMemory = [
+          {
+            role: "user",
+            parts: [
+              {
+                text: `
+                  These are some previous messages from the chat, use them to generate a response
+                  ${vectorMemory.map((item) => item.metadata.text).join("\n")}
+                `,
+              },
+            ],
+          },
+        ];
+
+        const aiResponse = await aiService.generateResponse([
+          ...longTermMemory,
+          ...shortTermMemory,
+        ]);
+
+        console.log("LongTermMemory --->", longTermMemory);
+        [...longTermMemory].map((item) => console.log("ltm --->", item));
+        console.log("shortTermMemory --->", shortTermMemory);
+        [...shortTermMemory].map((item) => console.log("stm --->", item));
 
         // saving ai response message in MongoDB, in order to maintain history
         const aiMessage = await messageModel.create({
@@ -119,7 +140,7 @@ async function initSocketServer(httpServer) {
           messageId: aiMessage._id,
           metadata: {
             chat: chatId,
-            user: socket.user._id.toString(), // Convert ObjectId to string for Pinecone
+            user: socket.user._id,
             text: aiResponse,
           },
         });
