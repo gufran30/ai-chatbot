@@ -65,7 +65,7 @@ async function loginUserControllers(req, res) {
 
   res.status(200).json({
     message: "User logged in successfully",
-    isUserExist: {
+    user: {
       email: isUserExist.email,
       id: isUserExist._id,
       fullName: isUserExist.fullName,

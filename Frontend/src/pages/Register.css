@@ -1,0 +1,112 @@
+:root {
+  --primary-color: #007bff;
+  --background-color: #ffffff;
+  --text-color: #000000;
+  --form-background: #f9f9f9;
+  --input-border: #cccccc;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background-color: #121212;
+    --text-color: #ffffff;
+    --form-background: #1e1e1e;
+    --input-border: #444444;
+  }
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+}
+
+.register-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1rem;
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+
+.register-container.light {
+  background-color: var(--background-light);
+  color: var(--text-light);
+}
+
+.register-container.dark {
+  background-color: var(--background-dark);
+  color: var(--text-dark);
+}
+
+.register-form {
+  width: 100%;
+  max-width: 400px;
+  background: var(--form-background);
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.register-container.dark .register-form {
+  background: var(--background-dark);
+  box-shadow: 0 4px 6px rgba(255, 255, 255, 0.1);
+}
+
+.register-form h1 {
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.register-form label {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.register-form input {
+  width: 100%;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.register-container.dark .register-form input {
+  border: 1px solid var(--input-border-dark);
+  background: var(--background-dark);
+  color: var(--text-dark);
+}
+
+.register-form button {
+  width: 100%;
+  padding: 0.75rem;
+  background: var(--primary-color);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.toggle-mode {
+  margin-bottom: 1rem;
+  padding: 0.5rem 1rem;
+  background: none;
+  border: 1px solid var(--primary-color);
+  color: var(--primary-color);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.name-fields {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.field {
+  flex: 1;
+}
